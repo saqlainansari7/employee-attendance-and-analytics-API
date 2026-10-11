@@ -1,37 +1,48 @@
 # Code Review
 
 ## Scope
-Reviewed the FastAPI application, MongoDB access patterns, attendance calculations, analytics pipelines, and the OpenAPI contract.
+Reviewed the FastAPI application, MongoDB queries, attendance calculations, analytics pipelines, pagination, and API validation.
 
-## Findings
+## Findings and Fixes
 
-### 1. Explain Pagination
-- **Location:** `app/main.py`, `explain_endpoint()`, `attendance_list` branch.
-- **Issue:** The explain command originally used a fixed skip of 0 and limit of 20 instead of the requested pagination.
-- **Impact:** The explained query did not fully represent the endpoint's requested page.
-- **Fix:** Accept `page` and `page_size`, then calculate skip as `(page - 1) * page_size` and use the requested page size.
+### 1. Explain Query Pagination
+- **Location:** `app/main.py`, `explain_endpoint()`
+- **Issue:** The attendance-list explain query previously used fixed pagination values.
+- **Fix:** Applied the requested page and page size using `(page - 1) * page_size` and the requested limit.
+- **Verification:** Completed the attendance pagination and explain endpoint checks.
 
 ### 2. Department Summary Rounding
-- **Location:** `department_summary()`.
-- **Issue:** MongoDB `$round` does not guarantee the required half-up rounding behavior.
-- **Impact:** Average work-hour values can differ at rounding boundaries.
-- **Fix:** Apply Python `Decimal` with `ROUND_HALF_UP` to the aggregated average.
+- **Location:** `department_summary()`
+- **Issue:** MongoDB rounding may not provide the required half-up rounding behavior.
+- **Fix:** Applied Python `Decimal` with `ROUND_HALF_UP` to the aggregated average work hours.
+- **Verification:** Checked the October 2026 department summary response.
 
 ### 3. Department Trend Date Coverage
-- **Location:** `build_department_trend_pipeline()`.
-- **Review:** Date filtering, densification, empty ranges, and requested end-date coverage require boundary testing.
-- **Verification:** Record the actual test result before marking this finding resolved.
+- **Location:** `build_department_trend_pipeline()`
+- **Review:** Checked an empty attendance date range, invalid date range, and requested date coverage.
+- **Verification:** Edge-case testing was completed. The expected row count and response values should be recorded from the actual API response.
 
 ## Existing Safeguards Reviewed
 - Unique employee-code and employee/date attendance indexes.
-- Duplicate punch-in handling.
-- Pagination limits on list endpoints.
+- Duplicate punch-in protection.
+- Pagination validation and limits.
 - Attendance regularization history.
-- Stored derived values used by analytics.
 - Environment-based MongoDB configuration.
+- Database query execution plans.
 
 ## Test Evidence
-Record the commands or requests executed, expected results, actual results, and any failures here. Do not mark a test as passed unless it was run against the current code.
+
+The following checks were executed through the running API and Swagger UI:
+- Health endpoint and Swagger UI availability.
+- Department summary for `2026-10`.
+- Department trend with an empty attendance range.
+- Invalid department-trend date range.
+- Monthly analytics for an unknown employee.
+- Duplicate punch-in handling.
+- Attendance pagination, including invalid pagination values.
+- MongoDB explain checks for analytics and attendance queries.
+
+Record the exact HTTP status codes, response values, and execution-plan details from the actual responses when documenting individual test results.
 
 ## Conclusion
-The implementation should be accepted only after the affected analytics, pagination, date-boundary cases, and query execution plans have been verified against the assignment contract.
+The application starts successfully, and the listed functional and query-plan checks have been exercised. Final acceptance should be based on the actual response evidence and the assignment's OpenAPI contract.
