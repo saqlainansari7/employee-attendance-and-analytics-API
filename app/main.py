@@ -1907,8 +1907,8 @@ def department_summary(
                 Decimal(str(value)).quantize(
                     Decimal("0.01"),
                     rounding=ROUND_HALF_UP
-            )
-        )
+                )
+             )
 
     return {
     "month": month,
