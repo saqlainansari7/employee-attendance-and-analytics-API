@@ -12,3 +12,5 @@ htmlcov/
 .DS_Store
 
 app/main.py.backup
+
+.env
