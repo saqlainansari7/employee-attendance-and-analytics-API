@@ -28,7 +28,7 @@ A REST API built with **FastAPI** and **MongoDB** to manage employee records, tr
 
 ## Prerequisites
 
-- Python 3.11+ or a compatible version supported by the project's dependencies
+- Python 3.11+
 - MongoDB local instance or MongoDB Atlas account
 - Git
 
@@ -41,8 +41,6 @@ git clone https://github.com/saqlainansari7/employee-attendance-and-analytics-AP
 cd employee-attendance-and-analytics-API
 ```
 
-Replace the repository URL with your actual GitHub repository URL.
-
 ### 2. Create and activate a virtual environment
 
 **Windows PowerShell:**
@@ -54,16 +52,8 @@ python -m venv .venv
 
 ### 3. Install dependencies
 
-If `requirements.txt` exists:
-
 ```bash
 pip install -r requirements.txt
-```
-
-Otherwise, install the required packages:
-
-```bash
-pip install fastapi uvicorn pymongo python-dotenv
 ```
 
 ### 4. Configure environment variables
@@ -89,7 +79,7 @@ MONGO_DB=attendance_db
 ### 5. Run the application
 
 ```bash
-python -m uvicorn app.main:app --port 8000
+uvicorn app.main:app --port 8000
 ```
 
 The API will be available at:
@@ -214,6 +204,8 @@ The API uses the `attendance_db` database by default.
 | `employees` | Employee details, department, shift timings, and joining date |
 | `attendance_logs` | Attendance status, punch timestamps, work hours, late minutes, overtime, and regularization history |
 
+Sample data files and the seeding utility are not included in this submission. Configure your own MongoDB database and provide the required environment variables before starting the API.
+
 ## Pagination
 
 Paginated endpoints use `page` and `page_size`.
@@ -233,9 +225,7 @@ The API uses HTTP status codes to communicate outcomes, including:
 
 ## Database Indexes
 
-The application creates indexes for employee lookup, joining-date queries, department filtering, attendance uniqueness, and attendance listing.
-
-These indexes help support common filtering, sorting, and aggregation operations.
+The application creates indexes for employee lookup, joining-date queries, department filtering, attendance uniqueness, and attendance listing. These indexes help support common filtering, sorting, and aggregation operations.
 
 ## Development Notes
 
@@ -244,7 +234,3 @@ These indexes help support common filtering, sorting, and aggregation operations
 - Use the interactive Swagger documentation to explore and test endpoints.
 - Run automated tests before submitting changes.
 - Validate analytics edge cases and query plans against the assignment's OpenAPI contract.
-
-## License
-
-Add the license required by the project or assignment, if applicable.
