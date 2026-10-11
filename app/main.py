@@ -1882,7 +1882,7 @@ def department_summary(
                         "in": {
                             "$cond": [
                                 {"$gt": [{"$size": "$$valid_hours"}, 0]},
-                                {"$round": [{"$avg": "$$valid_hours"}, 2]},
+                                {"$avg": "$$valid_hours"},
                                 None
                             ]
                         }
@@ -1900,9 +1900,19 @@ def department_summary(
 
     items = list(db.employees.aggregate(pipeline))
 
+    for item in items:
+        value = item.get("avg_work_hours")
+        if value is not None:
+            item["avg_work_hours"] = float(
+                Decimal(str(value)).quantize(
+                    Decimal("0.01"),
+                    rounding=ROUND_HALF_UP
+            )
+        )
+
     return {
-        "month": month,
-        "items": items
+    "month": month,
+    "items": items
     }
 
 
@@ -2268,6 +2278,8 @@ def department_trend(
 @app.get("/admin/explain/{endpoint}")
 def explain_endpoint(
     endpoint: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(20, ge=1, le=100),
     emp_code: Optional[str] = None,
     month: Optional[str] = None,
     department: Optional[str] = None,
@@ -2304,8 +2316,8 @@ def explain_endpoint(
                 "find": "attendance_logs",
                 "filter": query,
                 "sort": {"date": -1, "emp_code": 1},
-                "skip": 0,
-                "limit": 20
+                "skip": (page - 1) * page_size,
+                "limit": page_size
             },
             "verbosity": "executionStats"
         })
@@ -2529,7 +2541,7 @@ def explain_endpoint(
                             "in": {
                                 "$cond": [
                                     {"$gt": [{"$size": "$$valid_hours"}, 0]},
-                                    {"$round": [{"$avg": "$$valid_hours"}, 2]},
+                                    {"$avg": "$$valid_hours"},
                                     None
                                 ]
                             }

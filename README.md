@@ -28,7 +28,7 @@ A REST API built with **FastAPI** and **MongoDB** to manage employee records, tr
 
 ## Prerequisites
 
-- Python 3.10 or a compatible version supported by the project's dependencies
+- Python 3.11+ or a compatible version supported by the project's dependencies
 - MongoDB local instance or MongoDB Atlas account
 - Git
 
@@ -37,7 +37,7 @@ A REST API built with **FastAPI** and **MongoDB** to manage employee records, tr
 ### 1. Clone the repository
 
 ```bash
-git clone <YOUR_GITHUB_REPOSITORY_URL>
+git clone https://github.com/saqlainansari7/employee-attendance-and-analytics-API.git
 cd employee-attendance-and-analytics-API
 ```
 
@@ -89,7 +89,7 @@ MONGO_DB=attendance_db
 ### 5. Run the application
 
 ```bash
-python -m uvicorn app.main:app --reload --port 8000
+python -m uvicorn app.main:app --port 8000
 ```
 
 The API will be available at:
