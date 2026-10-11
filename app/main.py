@@ -552,17 +552,23 @@ def punch_out(body: PunchOutIn):
 
 
 
+   
     punch_in_time = record["punch_in"]
 
+    # MongoDB may return a naive datetime.
+    # Treat naive stored values as UTC.
+    if punch_in_time.tzinfo is None:
+        punch_in_time = punch_in_time.replace(tzinfo=timezone.utc)
 
+    # Ensure both datetimes use UTC.
+    punch_in_time = punch_in_time.astimezone(timezone.utc)
+    punch_out_time = punch_out_time.astimezone(timezone.utc)
 
     # Reject invalid punch-out times
-
     duration_seconds = (
-
         punch_out_time - punch_in_time
-
     ).total_seconds()
+
 
 
 
