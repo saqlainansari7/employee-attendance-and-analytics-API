@@ -1,38 +1,26 @@
 # Employee Attendance & Analytics API
 
-A REST API built with **FastAPI** and **MongoDB** to manage employee records, track attendance, regularize attendance entries, and generate employee and department analytics.
+A FastAPI and MongoDB REST API for employee management, attendance capture, manual attendance correction, and workforce analytics. This repository implements the HROne engineering assignment contract defined in `openapi.yaml` and `DATA_MODEL.md`.
 
 ## Features
 
-- Employee creation and paginated employee listing
-- Employee punch-in and punch-out
-- Attendance listing with filters and pagination
-- Attendance regularization with change history
-- Monthly employee attendance analytics
-- Department-wise monthly summary
-- Late-arrival leaderboard with ranking
-- Department attendance trends with a 7-day moving average
-- MongoDB query execution plans for performance analysis
-- Database indexes for frequently queried fields
-- Health endpoint to check API and database connectivity
+- Create employees and list them with department filtering and pagination.
+- Record punch-in and punch-out events; calculate late minutes, work hours, overtime, and half-day status.
+- List attendance by employee, date range, and status.
+- Correct attendance records while preserving an append-only audit history of fields that actually changed.
+- Generate employee monthly metrics, department monthly summaries, late-arrival rankings, and daily department trends.
+- Inspect MongoDB execution plans for supported endpoints with `executionStats`.
+- Create required MongoDB indexes idempotently at application startup.
 
-## Tech Stack
-
-- Python
-- FastAPI
-- MongoDB
-- PyMongo
-- Pydantic
-- Uvicorn
-- python-dotenv
-
-## Prerequisites
+## Technology
 
 - Python 3.11+
-- MongoDB local instance or MongoDB Atlas account
-- Git
+- FastAPI and Pydantic
+- PyMongo
+- MongoDB (local instance or Atlas)
+- Uvicorn and python-dotenv
 
-## Project Setup
+## Setup
 
 ### 1. Clone the repository
 
@@ -43,20 +31,27 @@ cd employee-attendance-and-analytics-API
 
 ### 2. Create and activate a virtual environment
 
-**Windows PowerShell:**
+Windows PowerShell:
 
 ```powershell
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 ```
 
+macOS/Linux:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate
+```
+
 ### 3. Install dependencies
 
 ```bash
-pip install -r requirements.txt
+python -m pip install -r requirements.txt
 ```
 
-### 4. Configure environment variables
+### 4. Configure MongoDB
 
 Create a `.env` file in the project root:
 
@@ -65,172 +60,139 @@ MONGO_URI=mongodb+srv://<username>:<password>@<cluster-url>/
 MONGO_DB=attendance_db
 ```
 
-Replace the placeholders with your MongoDB connection details. URL-encode special characters in the database password when required.
-
-For local MongoDB, you can use:
+For a local MongoDB instance, use:
 
 ```env
 MONGO_URI=mongodb://localhost:27017
 MONGO_DB=attendance_db
 ```
 
-**Security:** Never commit `.env`, database credentials, or other secrets to GitHub.
+Replace placeholders with your own connection details. URL-encode special characters in the password when needed. Existing process environment variables take precedence over values in `.env`.
 
-### 5. Run the application
+**Security:** Never commit `.env`, database credentials, virtual environments, or database dumps.
+
+### 5. Start the API
+
+Run the assignment command:
 
 ```bash
 uvicorn app.main:app --port 8000
 ```
 
-The API will be available at:
+Local URLs:
 
-- Base URL: `http://127.0.0.1:8000`
-- Swagger UI: `http://127.0.0.1:8000/docs`
-- ReDoc: `http://127.0.0.1:8000/redoc`
+- API: http://127.0.0.1:8000
+- Swagger UI: http://127.0.0.1:8000/docs
+- ReDoc: http://127.0.0.1:8000/redoc
+- Readiness check: http://127.0.0.1:8000/health
 
-The application creates the configured MongoDB indexes during startup.
+At startup, the application creates the indexes it needs. `/health` returns `{"status":"ok"}` only when MongoDB responds to a ping.
 
-## API Endpoints
+## API endpoints
 
-### Health
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | `/health` | Check API and MongoDB connectivity |
-
-### Employees
+All instants in requests and responses use integer epoch milliseconds. Calendar dates use `YYYY-MM-DD`, month filters use `YYYY-MM`, and shift times use 24-hour `HH:MM` in IST. Employee records are identified by `emp_code`; MongoDB's internal `_id` is not part of the API.
 
 | Method | Endpoint | Purpose |
 |---|---|---|
+| GET | `/health` | Check API and MongoDB readiness |
 | POST | `/employees` | Create an employee |
-| GET | `/employees` | List employees with optional department filtering and pagination |
+| GET | `/employees` | List employees; optional `department`, `page`, `page_size` |
+| POST | `/attendance/punch-in` | Create an attendance record for punch-in |
+| POST | `/attendance/punch-out` | Punch out and compute attendance values |
+| GET | `/attendance` | List attendance; optional `emp_code`, `date_from`, `date_to`, `status`, pagination |
+| PATCH | `/attendance/{emp_code}/{date}` | Correct a record and append to its history |
+| GET | `/analytics/employees/{emp_code}/monthly` | Monthly metrics for one employee |
+| GET | `/analytics/departments/summary` | Department monthly summary |
+| GET | `/analytics/leaderboard/late` | Rank employees by total late minutes |
+| GET | `/analytics/departments/{department}/trend` | Daily department attendance trend and 7-day moving average |
+| GET | `/admin/explain/{endpoint}` | MongoDB execution plan for a supported query or aggregation |
 
-Example:
+### Example requests
+
+List Engineering employees:
 
 ```http
 GET /employees?department=Engineering&page=1&page_size=20
 ```
 
-### Attendance
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| POST | `/attendance/punch-in` | Record an employee's punch-in |
-| POST | `/attendance/punch-out` | Record punch-out and calculate work duration |
-| GET | `/attendance` | List attendance records with filters and pagination |
-| PATCH | `/attendance/{emp_code}/{date}` | Regularize an existing attendance record |
-
-Example:
+List October attendance:
 
 ```http
 GET /attendance?date_from=2026-10-01&date_to=2026-10-31&page=1&page_size=20
 ```
 
-Attendance timestamps supplied through the API use epoch milliseconds.
-
-### Employee Analytics
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | `/analytics/employees/{emp_code}/monthly` | Retrieve an employee's monthly attendance metrics |
-
-Example:
+Get employee monthly analytics:
 
 ```http
 GET /analytics/employees/EMP1001/monthly?month=2026-10
 ```
 
-### Department Analytics
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | `/analytics/departments/summary` | Retrieve department-wise monthly metrics |
-| GET | `/analytics/departments/{department}/trend` | Retrieve daily attendance trends for a department |
-
-Department summary example:
+Get the Engineering department summary:
 
 ```http
-GET /analytics/departments/summary?month=2026-10
+GET /analytics/departments/summary?month=2026-10&department=Engineering
 ```
 
-Department trend example:
+Get a seven-day department trend:
 
 ```http
 GET /analytics/departments/Engineering/trend?from=2026-10-01&to=2026-10-07
 ```
 
-The trend endpoint includes daily records, working-day indicators, headcount, attendance rate, and a 7-day moving average.
-
-### Late-arrival Leaderboard
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | `/analytics/leaderboard/late` | Rank employees by total late minutes for a month |
-
-Example:
+Get the late leaderboard:
 
 ```http
 GET /analytics/leaderboard/late?month=2026-10&limit=10&department=Engineering
 ```
 
-### Query Explain
-
-| Method | Endpoint | Purpose |
-|---|---|---|
-| GET | `/admin/explain/{endpoint}` | Inspect MongoDB query execution statistics |
-
-Supported endpoint names:
-
-- `attendance_list`
-- `employee_monthly`
-- `department_summary`
-- `late_leaderboard`
-- `department_trend`
-
-Example:
+Explain a department trend query:
 
 ```http
 GET /admin/explain/department_trend?department=Engineering&from=2026-10-01&to=2026-10-07
 ```
 
-Use the parameters required by the selected endpoint. Explain output includes MongoDB execution-plan information useful for checking index usage and query performance.
+The explain endpoint supports `attendance_list`, `employee_monthly`, `department_summary`, `late_leaderboard`, and `department_trend`. Supply the parameters required for the selected endpoint. The response is MongoDB's raw explain output with execution statistics; results depend on the database contents and indexes.
 
-## Data Storage
+## Business rules implemented
 
-The API uses the `attendance_db` database by default.
+- Shift calculations and attendance dates use IST. Overnight shifts belong to the date on which the shift started.
+- The lateness grace period is 10 minutes. Late minutes are recorded only when the punch-in is strictly more than 10 minutes after shift start; the value is measured from shift start and floored to whole minutes.
+- Overtime is recorded only when the punch-out is at least 30 whole minutes beyond shift end.
+- Work hours are calculated from punch timestamps and rounded to two decimal places using half-up rounding. `half_day` is true when the rounded hours are below 4.50.
+- `PRESENT`, `WFH`, and `ON_DUTY` count as presence. Monthly present-day metrics count weekdays only; weekend records can still contribute to late and overtime totals.
+- Headcount includes employees whose `joined_on` is on or before the end of the relevant reporting period, including employees without attendance logs.
+- Attendance correction history records only manual corrections and contains a before/after pair for each field that actually changed.
+- Pagination starts at page 1; `page_size` is limited to 100.
 
-| Collection | Purpose |
-|---|---|
-| `employees` | Employee details, department, shift timings, and joining date |
-| `attendance_logs` | Attendance status, punch timestamps, work hours, late minutes, overtime, and regularization history |
+For the authoritative route schemas and full R1–R10 rules, see [`openapi.yaml`](openapi.yaml). For MongoDB document structure and field types, see [`DATA_MODEL.md`](DATA_MODEL.md).
 
-Sample data files and the seeding utility are not included in this submission. Configure your own MongoDB database and provide the required environment variables before starting the API.
+## MongoDB indexes
 
-## Pagination
+The application creates these indexes at startup (if they do not already exist):
 
-Paginated endpoints use `page` and `page_size`.
+| Collection | Index | Purpose |
+|---|---|---|
+| `employees` | `uq_employees_emp_code` (unique) | Enforce unique employee codes |
+| `employees` | `ix_employees_joined_on` | Support joining-date filters |
+| `employees` | `ix_employees_department_emp` | Department filtering and employee-code lookup |
+| `attendance_logs` | `uq_attendance_emp_date` (unique compound) | Enforce one record per employee per attendance date and support lookup |
+| `attendance_logs` | `ix_attendance_date_emp` | Support date-based attendance queries and sorting |
 
-- `page` starts at 1.
-- `page_size` must be between 1 and 100.
-- Invalid pagination values return HTTP 422.
+Duplicate-key errors are translated to HTTP 409 for duplicate employee creation and duplicate punch-ins. The unique attendance index is the final safeguard against two records for the same `emp_code` and attendance date.
 
-## Error Handling
+## Verification notes
 
-The API uses HTTP status codes to communicate outcomes, including:
+Manual checks were performed against a small MongoDB Atlas test dataset. Observed checks included the health endpoint, employee and attendance pagination, employee monthly analytics, department summary, an empty-range department trend, regular and overnight shift calculations, regularization history, validation errors, duplicate handling, and explain plans showing index use for the exercised queries.
 
-- `404 Not Found` — requested employee, attendance record, or department is missing
-- `409 Conflict` — duplicate employee code or conflicting attendance operation
-- `422 Unprocessable Entity` — invalid input or date range
-- `503 Service Unavailable` — MongoDB is unavailable
+These are manual smoke-test observations, not a comprehensive automated regression suite or a performance guarantee for a large seeded dataset. See [`REVIEW.md`](REVIEW.md) for the recorded evidence and limitations.
 
-## Database Indexes
+## Repository files
 
-The application creates indexes for employee lookup, joining-date queries, department filtering, attendance uniqueness, and attendance listing. These indexes help support common filtering, sorting, and aggregation operations.
+- `app/main.py` — FastAPI application and MongoDB operations
+- `openapi.yaml` — assignment API contract and business rules
+- `DATA_MODEL.md` — MongoDB schema and seeded-data expectations
+- `DECISIONS.md` — implementation decisions and trade-offs
+- `REVIEW.md` — code review observations and verification evidence
+- `requirements.txt` — Python dependencies
 
-## Development Notes
-
-- Keep database credentials in environment variables.
-- Do not commit `.env` or `.venv`.
-- Use the interactive Swagger documentation to explore and test endpoints.
-- Run automated tests before submitting changes.
-- Validate analytics edge cases and query plans against the assignment's OpenAPI contract.
+Sample data and a seed utility are not included. Configure your own MongoDB database using `MONGO_URI` and `MONGO_DB` before running the application.
