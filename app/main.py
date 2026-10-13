@@ -264,6 +264,13 @@ def create_employee(body: EmployeeIn):
 
     doc.pop("_id", None)
 
+    # The API contract requires created_at as epoch milliseconds.
+    created_at = doc.get("created_at")
+    if created_at is not None:
+        if created_at.tzinfo is None:
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        doc["created_at"] = int(created_at.timestamp() * 1000)
+
     return doc
 
 
