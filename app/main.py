@@ -112,16 +112,40 @@ def create_indexes():
 
 # --------------------------------------------------------------------------- #
 
-def compute_late_minutes(punch_in: datetime, shift_start: str) -> int:
-    """Return whole late minutes after the 10-minute grace period."""
+def get_attendance_date_for_shift(
+    local_punch_in: datetime,
+    shift_start: str,
+    shift_end: str
+) -> date:
+    """Resolve the IST attendance date, including overnight shifts."""
+    local_punch_in = local_punch_in.astimezone(IST)
+    start_hm = tuple(map(int, shift_start.split(":")))
+    end_hm = tuple(map(int, shift_end.split(":")))
+    attendance_date = local_punch_in.date()
+
+    if (
+        end_hm <= start_hm
+        and (local_punch_in.hour, local_punch_in.minute) < end_hm
+    ):
+        attendance_date -= timedelta(days=1)
+
+    return attendance_date
+
+
+def compute_late_minutes(
+    punch_in: datetime,
+    shift_start: str,
+    attendance_date: date
+) -> int:
+    """Return whole minutes since shift start when more than 10 minutes late."""
     if punch_in.tzinfo is None:
         punch_in = punch_in.replace(tzinfo=timezone.utc)
 
     local_in = punch_in.astimezone(IST)
     h, m = map(int, shift_start.split(":"))
     shift_start_dt = datetime.combine(
-        local_in.date(), datetime.min.time(), tzinfo=IST
-    ).replace(hour=h, minute=m)
+        attendance_date, time(h, m), tzinfo=IST
+    )
 
     late_seconds = (local_in - shift_start_dt).total_seconds()
     return int(late_seconds // 60) if late_seconds > 600 else 0
@@ -428,13 +452,9 @@ def punch_in(body: PunchInIn):
     local_ts = ts.astimezone(IST)
     shift_start = employee.get("shift_start", "09:30")
     shift_end = employee.get("shift_end", "18:30")
-    sh, sm = map(int, shift_start.split(":"))
-    eh, em = map(int, shift_end.split(":"))
-
-    # For overnight shifts, early-morning punches belong to the previous shift date.
-    attendance_date = local_ts.date()
-    if (eh, em) <= (sh, sm) and (local_ts.hour, local_ts.minute) < (eh, em):
-        attendance_date -= timedelta(days=1)
+    attendance_date = get_attendance_date_for_shift(
+        local_ts, shift_start, shift_end
+    )
     date_str = attendance_date.isoformat()
 
     doc = {
@@ -444,7 +464,7 @@ def punch_in(body: PunchInIn):
         "punch_in": ts,
         "punch_out": None,
         "work_hours": None,
-        "late_minutes": compute_late_minutes(ts, shift_start),
+        "late_minutes": compute_late_minutes(ts, shift_start, attendance_date),
         "overtime_minutes": 0,
         "half_day": False,
         "history": [],
@@ -1213,18 +1233,19 @@ def regularize_attendance(
 
 
 
-        # Attendance date is based on IST local date
-
+        # Validate the R1 attendance date, including after-midnight punches
+        # that belong to the previous day's overnight shift.
         local_in = new_in.astimezone(IST)
+        shift_start_for_date = employee.get("shift_start", "09:30")
+        shift_end_for_date = employee.get("shift_end", "18:30")
+        expected_attendance_date = get_attendance_date_for_shift(
+            local_in, shift_start_for_date, shift_end_for_date
+        )
 
-        if local_in.date().isoformat() != date:
-
+        if expected_attendance_date != attendance_date:
             raise HTTPException(
-
                 status_code=422,
-
                 detail="punch_in must belong to the attendance date"
-
             )
 
 
@@ -1363,12 +1384,9 @@ def regularize_attendance(
 
 
 
-        # Shift start in IST
-
-        shift_start_dt = local_in.replace(
-
-            hour=sh, minute=sm, second=0, microsecond=0
-
+        # Shift start is defined on the attendance date (R1).
+        shift_start_dt = datetime.combine(
+            attendance_date, time(sh, sm), tzinfo=IST
         )
 
         # Late calculation: strictly more than 10 minutes late
@@ -1427,18 +1445,12 @@ def regularize_attendance(
 
 
 
-            # Overnight shift ends on the following day
-
-            shift_end_dt = local_in.replace(
-
-                hour=eh, minute=em, second=0, microsecond=0
-
+            # Shift end is anchored to the shift's attendance date.
+            shift_end_dt = datetime.combine(
+                attendance_date, time(eh, em), tzinfo=IST
             )
 
-
-
             if (eh, em) <= (sh, sm):
-
                 shift_end_dt += timedelta(days=1)
 
 
