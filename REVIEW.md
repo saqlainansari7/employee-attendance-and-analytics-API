@@ -9,6 +9,7 @@ Reviewed `app/main.py` against `openapi.yaml` and `DATA_MODEL.md`, focusing on A
 - Added request validation for employee code, email, name, department, shift times, joining date, and different shift start/end values.
 - Duplicate employee codes return HTTP 409, including the database duplicate-key race path.
 - Manual checks: invalid email returned 422; duplicate employee code returned 409.
+- Timestamp request fields are configured as strict integers so JSON strings and floats are not silently coerced into epoch milliseconds. Explain endpoints validate `YYYY-MM` before parsing it.
 
 ### 2. Timestamp serialization and attendance calculations
 - API timestamps are returned as epoch milliseconds; stored BSON datetimes are treated as UTC when serialized.
@@ -41,6 +42,7 @@ Additional manual edge checks included duplicate punch-in handling, invalid pagi
 - These are manual checks against the currently configured MongoDB Atlas database and its small test dataset, not an automated regression suite.
 - Explain timings and examined-document counts reflect this dataset only; they do not establish performance under the assignment's larger grading dataset.
 - The concurrent duplicate-create and concurrent punch-in protection paths rely on database unique indexes, but a simultaneous-request race test has not been recorded here.
+- The latest strict timestamp-input and malformed explain-month guards, plus the punch-out earlier-than-punch-in error path, were added after the observations above and still need a local smoke test after pulling the newest commit.
 - Before submission, run the grader or a repeatable test suite against the assignment's supported MongoDB version and seeded data if available.
 
 ## Conclusion
