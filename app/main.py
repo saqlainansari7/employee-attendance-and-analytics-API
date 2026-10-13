@@ -2465,7 +2465,7 @@ def explain_endpoint(
                 status_code=422,
                 detail="emp_code and month are required"
             )
-        if not re.fullmatch(r"\\d{4}-(0[1-9]|1[0-2])", month):
+        if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month):
             raise HTTPException(status_code=422, detail="month must be YYYY-MM")
 
         year, month_number = map(int, month.split("-"))
@@ -2497,7 +2497,7 @@ def explain_endpoint(
                 status_code=422,
                 detail="month is required"
             )
-        if not re.fullmatch(r"\\d{4}-(0[1-9]|1[0-2])", month):
+        if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month):
             raise HTTPException(status_code=422, detail="month must be YYYY-MM")
 
         year, month_number = map(int, month.split("-"))
