@@ -20,6 +20,7 @@ openapi.yaml for the contract and DATA_MODEL.md for what is stored in MongoDB.
 
 import os
 import json
+import re
 from bson.json_util import dumps
 from datetime import datetime, time, timedelta, timezone
 from fastapi import Request
@@ -1973,21 +1974,13 @@ def department_summary(
 
 
 @app.get("/analytics/leaderboard/late")
-def late_leaderboard(
-    month: str = Query(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
-    limit: int = Query(10, ge=1, le=50),
+def build_late_leaderboard_pipeline(
+    month_start: date,
+    next_month: date,
+    limit: int,
     department: Optional[str] = None
 ):
-    # Calculate the selected month's date range.
-    year, month_number = map(int, month.split("-"))
-    month_start = date(year, month_number, 1)
-
-    if month_number == 12:
-        next_month = date(year + 1, 1, 1)
-    else:
-        next_month = date(year, month_number + 1, 1)
-
-    # Join attendance records with employee details.
+    """Build the shared ranking pipeline for endpoint and explain."""
     pipeline = [
         {
             "$match": {
@@ -2016,7 +2009,6 @@ def late_leaderboard(
         {"$unwind": "$employee"}
     ]
 
-    # Apply department filtering before ranking.
     if department is not None:
         pipeline.append({
             "$match": {"employee.department": department}
@@ -2026,14 +2018,10 @@ def late_leaderboard(
         {
             "$setWindowFields": {
                 "sortBy": {"total_late_minutes": -1},
-                "output": {
-                    "rank": {"$rank": {}}
-                }
+                "output": {"rank": {"$rank": {}}}
             }
         },
-        {
-            "$match": {"rank": {"$lte": limit}}
-        },
+        {"$match": {"rank": {"$lte": limit}}},
         {
             "$sort": {
                 "total_late_minutes": -1,
@@ -2052,7 +2040,25 @@ def late_leaderboard(
             }
         }
     ])
+    return pipeline
 
+
+def late_leaderboard(
+    month: str = Query(..., pattern=r"^\\d{4}-(0[1-9]|1[0-2])$"),
+    limit: int = Query(10, ge=1, le=50),
+    department: Optional[str] = None
+):
+    year, month_number = map(int, month.split("-"))
+    month_start = date(year, month_number, 1)
+    next_month = (
+        date(year + 1, 1, 1)
+        if month_number == 12
+        else date(year, month_number + 1, 1)
+    )
+
+    pipeline = build_late_leaderboard_pipeline(
+        month_start, next_month, limit, department
+    )
     items = list(db.attendance_logs.aggregate(pipeline))
 
     return {
@@ -2680,79 +2686,23 @@ def explain_endpoint(
                 detail="month is required"
             )
 
+        if not re.fullmatch(r"\\d{4}-(0[1-9]|1[0-2])", month):
+            raise HTTPException(
+                status_code=422,
+                detail="month must be YYYY-MM"
+            )
+
         year, month_number = map(int, month.split("-"))
         month_start = date(year, month_number, 1)
+        next_month = (
+            date(year + 1, 1, 1)
+            if month_number == 12
+            else date(year, month_number + 1, 1)
+        )
 
-        if month_number == 12:
-            next_month = date(year + 1, 1, 1)
-        else:
-            next_month = date(year, month_number + 1, 1)
-
-        pipeline = [
-            {
-                "$match": {
-                    "date": {
-                        "$gte": month_start.isoformat(),
-                        "$lt": next_month.isoformat()
-                    },
-                    "late_minutes": {"$gt": 0}
-                }
-            },
-            {
-                "$group": {
-                    "_id": "$emp_code",
-                    "total_late_minutes": {
-                        "$sum": "$late_minutes"
-                    }
-                }
-            },
-            {
-                "$lookup": {
-                    "from": "employees",
-                    "localField": "_id",
-                    "foreignField": "emp_code",
-                    "as": "employee"
-                }
-            },
-            {"$unwind": "$employee"}
-        ]
-
-        if department is not None:
-            pipeline.append({
-                "$match": {
-                    "employee.department": department
-                }
-            })
-
-        pipeline.extend([
-            {
-                "$setWindowFields": {
-                    "sortBy": {
-                        "total_late_minutes": -1
-                    },
-                    "output": {
-                        "rank": {"$rank": {}}
-                    }
-                }
-            },
-            {"$match": {"rank": {"$lte": limit}}},
-            {
-                "$sort": {
-                    "total_late_minutes": -1,
-                    "_id": 1
-                }
-            },
-            {
-                "$project": {
-                    "_id": 0,
-                    "emp_code": "$_id",
-                    "name": "$employee.name",
-                    "department": "$employee.department",
-                    "total_late_minutes": 1,
-                    "rank": 1
-                }
-            }
-        ])
+        pipeline = build_late_leaderboard_pipeline(
+            month_start, next_month, limit, department
+        )
 
         result = db.command({
             "explain": {
@@ -2764,9 +2714,7 @@ def explain_endpoint(
         })
 
         return json.loads(dumps(result))
-    
-    
-    
+
     if endpoint == "department_trend":
         if not department or from_date is None or to_date is None:
             raise HTTPException(
