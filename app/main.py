@@ -2312,6 +2312,63 @@ def department_trend(
 
     items = list(db.employees.aggregate(pipeline))
 
+    # If no attendance documents exist in the entire range, the pipeline's
+    # null-date group is filtered before $densify and returns no rows.
+    # Build the (at most 92) requested calendar rows so the API still returns
+    # one row per day, with zero attendance and the correct daily headcount.
+    if not items:
+        joined_employees = list(
+            db.employees.find(
+                {
+                    "department": department,
+                    "joined_on": {"$lte": to_date.isoformat()}
+                },
+                {"_id": 0, "joined_on": 1}
+            ).sort("joined_on", 1)
+        )
+        joined_dates = [employee["joined_on"] for employee in joined_employees]
+        joined_index = 0
+        calendar_dates = [
+            from_date + timedelta(days=offset)
+            for offset in range((to_date - from_date).days + 1)
+        ]
+
+        items = []
+        for current_date in calendar_dates:
+            date_str = current_date.isoformat()
+            while (
+                joined_index < len(joined_dates)
+                and joined_dates[joined_index] <= date_str
+            ):
+                joined_index += 1
+
+            is_working_day = current_date.weekday() < 5
+            headcount = joined_index
+            attendance_rate = (
+                0.0 if is_working_day and headcount > 0 else None
+            )
+            items.append({
+                "date": date_str,
+                "is_working_day": is_working_day,
+                "headcount": headcount,
+                "present_count": 0,
+                "late_count": 0,
+                "attendance_rate": attendance_rate,
+                "moving_avg_7d": None
+            })
+
+        # Match MongoDB's trailing seven-document average, ignoring null rates.
+        for index, item in enumerate(items):
+            window_rates = [
+                row["attendance_rate"]
+                for row in items[max(0, index - 6):index + 1]
+                if row["attendance_rate"] is not None
+            ]
+            item["moving_avg_7d"] = (
+                sum(window_rates) / len(window_rates)
+                if window_rates else None
+            )
+
     # Round reported rates to four decimal places, half-up.
     for item in items:
         for field in ("attendance_rate", "moving_avg_7d"):
