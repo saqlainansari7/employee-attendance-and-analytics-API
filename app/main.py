@@ -1480,24 +1480,30 @@ def regularize_attendance(
 
 
     update_fields = {
-
         "status": new_status,
-
         "punch_in": new_in,
-
         "punch_out": new_out,
-
         "work_hours": work_hours,
-
         "late_minutes": late_minutes,
-
         "overtime_minutes": overtime_minutes,
-
         "half_day": half_day
-
     }
 
-
+    # Audit every derived value that changes as a result of correcting
+    # status or punch times, not only the directly edited input fields.
+    old_derived_values = {
+        "work_hours": record.get("work_hours"),
+        "late_minutes": record.get("late_minutes", 0),
+        "overtime_minutes": record.get("overtime_minutes", 0),
+        "half_day": record.get("half_day", False)
+    }
+    for field, old_value in old_derived_values.items():
+        new_value = update_fields[field]
+        if old_value != new_value:
+            changes[field] = {
+                "from": old_value,
+                "to": new_value
+            }
 
     history_entry = {
 
