@@ -27,7 +27,7 @@ from fastapi.responses import JSONResponse
 from typing import Optional
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator, model_validator
 from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 from pymongo import ReturnDocument
@@ -157,20 +157,48 @@ def compute_overtime(punch_out: datetime, shift_end: str, date_str: str) -> int:
 # --------------------------------------------------------------------------- #
 
 class EmployeeIn(BaseModel):
-
-    emp_code: str
-
-    name: str
-
-    email: str
-
-    department: str
-
-    shift_start: str = "09:30"
-
-    shift_end: str = "18:30"
-
+    emp_code: str = Field(pattern=r"^EMP\d{4,6}$")
+    name: str = Field(min_length=1, max_length=100)
+    email: str = Field(
+        max_length=120,
+        pattern=r"^[^@\s]+@[^@\s]+\.[^@\s]+$"
+    )
+    department: str = Field(min_length=1, max_length=50)
+    shift_start: str = Field(
+        default="09:30",
+        pattern=r"^([01]\d|2[0-3]):[0-5]\d$"
+    )
+    shift_end: str = Field(
+        default="18:30",
+        pattern=r"^([01]\d|2[0-3]):[0-5]\d$"
+    )
     joined_on: str
+
+    @field_validator("name", "department")
+    @classmethod
+    def required_text_must_not_be_blank(cls, value: str) -> str:
+        value = value.strip()
+        if not value:
+            raise ValueError("must not be blank")
+        return value
+
+    @field_validator("joined_on")
+    @classmethod
+    def joined_on_must_be_a_real_iso_date(cls, value: str) -> str:
+        try:
+            parsed = date.fromisoformat(value)
+        except ValueError as exc:
+            raise ValueError("joined_on must be a valid YYYY-MM-DD date") from exc
+
+        if parsed.isoformat() != value:
+            raise ValueError("joined_on must be a valid YYYY-MM-DD date")
+        return value
+
+    @model_validator(mode="after")
+    def shifts_must_differ(self):
+        if self.shift_start == self.shift_end:
+            raise ValueError("shift_start and shift_end must be different")
+        return self
 
 
 
