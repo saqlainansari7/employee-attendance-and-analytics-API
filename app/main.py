@@ -630,32 +630,22 @@ def punch_out(body: PunchOutIn):
 
 
 
-    shift_end_time = punch_in_time.replace(
-
-        hour=end_h,
-
-        minute=end_m,
-
-        second=0,
-
-        microsecond=0
-
+    # Shift times are defined in IST. Build the shift end from the
+    # attendance date (the shift's start date), not from the UTC punch-in.
+    shift_end_time = datetime.combine(
+        date.fromisoformat(record["date"]),
+        time(end_h, end_m),
+        tzinfo=IST
     )
 
-
-
-    # Overnight shift: shift ends on the following day
-
+    # Overnight shift: its end falls on the day after the attendance date.
     if (end_h, end_m) <= (start_h, start_m):
-
         shift_end_time += timedelta(days=1)
 
-
-
+    # Compare absolute instants in UTC so the IST offset is applied correctly.
+    shift_end_time_utc = shift_end_time.astimezone(timezone.utc)
     overtime_elapsed = int(
-
-        (punch_out_time - shift_end_time).total_seconds() // 60
-
+        (punch_out_time - shift_end_time_utc).total_seconds() // 60
     )
 
 
