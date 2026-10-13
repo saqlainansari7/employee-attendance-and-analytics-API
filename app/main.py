@@ -719,10 +719,13 @@ def punch_out(body: PunchOutIn):
 
 
     def to_epoch_ms(value):
-
         if value is None:
-
             return None
+
+        # PyMongo may return BSON datetimes as naive UTC values.
+        # Attach UTC explicitly before converting to epoch milliseconds.
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
 
         return int(value.timestamp() * 1000)
 
