@@ -1973,7 +1973,6 @@ def department_summary(
 
 
 
-@app.get("/analytics/leaderboard/late")
 def build_late_leaderboard_pipeline(
     month_start: date,
     next_month: date,
@@ -2043,8 +2042,9 @@ def build_late_leaderboard_pipeline(
     return pipeline
 
 
+@app.get("/analytics/leaderboard/late")
 def late_leaderboard(
-    month: str = Query(..., pattern=r"^\\d{4}-(0[1-9]|1[0-2])$"),
+    month: str = Query(..., pattern=r"^\d{4}-(0[1-9]|1[0-2])$"),
     limit: int = Query(10, ge=1, le=50),
     department: Optional[str] = None
 ):
@@ -2686,7 +2686,7 @@ def explain_endpoint(
                 detail="month is required"
             )
 
-        if not re.fullmatch(r"\\d{4}-(0[1-9]|1[0-2])", month):
+        if not re.fullmatch(r"\d{4}-(0[1-9]|1[0-2])", month):
             raise HTTPException(
                 status_code=422,
                 detail="month must be YYYY-MM"
