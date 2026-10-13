@@ -233,7 +233,7 @@ class PunchInIn(BaseModel):
 
     emp_code: str
 
-    punched_at: Optional[int] = None
+    punched_at: Optional[int] = Field(default=None, strict=True)
 
     status: str = "PRESENT"
 
@@ -245,7 +245,7 @@ class PunchOutIn(BaseModel):
 
     emp_code: str
 
-    punched_at: Optional[int] = None
+    punched_at: Optional[int] = Field(default=None, strict=True)
 
 
 
@@ -259,9 +259,9 @@ class RegularizeIn(BaseModel):
 
     status: Optional[str] = None
 
-    punch_in: Optional[int] = None
+    punch_in: Optional[int] = Field(default=None, strict=True)
 
-    punch_out: Optional[int] = None
+    punch_out: Optional[int] = Field(default=None, strict=True)
 
 
 
@@ -578,13 +578,29 @@ def punch_out(body: PunchOutIn):
 
 
     if not record:
+        # If an open punch-in exists but the supplied punch-out instant is
+        # not after it, report the contract's 422 instead of a misleading 404.
+        latest_open_record = db.attendance_logs.find_one(
+            {
+                "emp_code": body.emp_code,
+                "punch_in": {"$ne": None},
+                "punch_out": None
+            },
+            sort=[("punch_in", -1)]
+        )
+        if latest_open_record:
+            latest_punch_in = latest_open_record["punch_in"]
+            if latest_punch_in.tzinfo is None:
+                latest_punch_in = latest_punch_in.replace(tzinfo=timezone.utc)
+            if punch_out_time <= latest_punch_in.astimezone(timezone.utc):
+                raise HTTPException(
+                    status_code=422,
+                    detail="Punch-out must be after punch-in and within 24 hours"
+                )
 
         raise HTTPException(
-
             status_code=404,
-
             detail="No open punch-in record found"
-
         )
 
 
@@ -2449,6 +2465,8 @@ def explain_endpoint(
                 status_code=422,
                 detail="emp_code and month are required"
             )
+        if not re.fullmatch(r"\\d{4}-(0[1-9]|1[0-2])", month):
+            raise HTTPException(status_code=422, detail="month must be YYYY-MM")
 
         year, month_number = map(int, month.split("-"))
         start = date(year, month_number, 1)
@@ -2479,6 +2497,8 @@ def explain_endpoint(
                 status_code=422,
                 detail="month is required"
             )
+        if not re.fullmatch(r"\\d{4}-(0[1-9]|1[0-2])", month):
+            raise HTTPException(status_code=422, detail="month must be YYYY-MM")
 
         year, month_number = map(int, month.split("-"))
         month_start = date(year, month_number, 1)
