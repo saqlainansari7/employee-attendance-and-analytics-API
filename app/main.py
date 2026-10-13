@@ -1601,6 +1601,95 @@ def regularize_attendance(
     ]
     return updated
 
+def build_employee_monthly_pipeline(
+    emp_code: str,
+    month_start: date,
+    next_month: date
+):
+    """Build the shared database aggregation for employee monthly analytics."""
+    return [
+        {
+            "$match": {
+                "emp_code": emp_code,
+                "date": {
+                    "$gte": month_start.isoformat(),
+                    "$lt": next_month.isoformat()
+                }
+            }
+        },
+        {
+            "$group": {
+                "_id": None,
+                "present_days": {
+                    "$sum": {
+                        "$cond": [
+                            {
+                                "$and": [
+                                    {
+                                        "$in": [
+                                            "$status",
+                                            ["PRESENT", "WFH", "ON_DUTY"]
+                                        ]
+                                    },
+                                    {
+                                        "$in": [
+                                            {
+                                                "$dayOfWeek": {
+                                                    "$dateFromString": {
+                                                        "dateString": "$date"
+                                                    }
+                                                }
+                                            },
+                                            [2, 3, 4, 5, 6]
+                                        ]
+                                    }
+                                ]
+                            },
+                            {
+                                "$cond": [
+                                    {"$eq": ["$half_day", True]},
+                                    0.5,
+                                    1
+                                ]
+                            },
+                            0
+                        ]
+                    }
+                },
+                "leave_days": {
+                    "$sum": {
+                        "$cond": [
+                            {"$eq": ["$status", "LEAVE"]},
+                            1,
+                            0
+                        ]
+                    }
+                },
+                "late_count": {
+                    "$sum": {
+                        "$cond": [
+                            {
+                                "$gt": [
+                                    {"$ifNull": ["$late_minutes", 0]},
+                                    0
+                                ]
+                            },
+                            1,
+                            0
+                        ]
+                    }
+                },
+                "total_late_minutes": {
+                    "$sum": {"$ifNull": ["$late_minutes", 0]}
+                },
+                "total_overtime_minutes": {
+                    "$sum": {"$ifNull": ["$overtime_minutes", 0]}
+                }
+            }
+        }
+    ]
+
+
 @app.get("/analytics/employees/{emp_code}/monthly")
 def employee_monthly(
     emp_code: str,
@@ -1638,99 +1727,11 @@ def employee_monthly(
         current_day += date.resolution
 
     
-    # Get this employee's attendance records for the month.
-    records = list(db.attendance_logs.aggregate([
-        {
-            "$match": {
-                "emp_code": emp_code,
-                "date": {
-                    "$gte": month_start.isoformat(),
-                    "$lt": next_month.isoformat()
-                }
-            }
-        },
-        {
-            "$group": {
-                "_id": None,
-
-                # Count present days only on weekdays.
-                # A half-day contributes 0.5.
-                "present_days": {
-                    "$sum": {
-                        "$cond": [
-                            {
-                                "$and": [
-                                    {
-                                        "$in": [
-                                            "$status",
-                                            ["PRESENT", "WFH", "ON_DUTY"]
-                                        ]
-                                    },
-                                    {
-                                        "$in": [
-                                            {
-                                                "$dayOfWeek": {
-                                                    "$dateFromString": {
-                                                        "dateString": "$date"
-                                                    }
-                                                }
-                                            },
-                                            [2, 3, 4, 5, 6]
-                                        ]
-                                    }
-                                ]
-                            },
-                            {
-                                "$cond": [
-                                    {"$eq": ["$half_day", True]},
-                                    0.5,
-                                    1
-                                ]
-                            },
-                            0
-                        ]
-                    }
-                },
-
-                # Count leave records.
-                "leave_days": {
-                    "$sum": {
-                        "$cond": [
-                            {"$eq": ["$status", "LEAVE"]},
-                            1,
-                            0
-                        ]
-                    }
-                },
-
-                # Count records with late minutes greater than zero.
-                "late_count": {
-                    "$sum": {
-                        "$cond": [
-                            {
-                                "$gt": [
-                                    {"$ifNull": ["$late_minutes", 0]},
-                                    0
-                                ]
-                            },
-                            1,
-                            0
-                        ]
-                    }
-                },
-
-                # Total late minutes for the month.
-                "total_late_minutes": {
-                    "$sum": {"$ifNull": ["$late_minutes", 0]}
-                },
-
-                # Total overtime minutes for the month.
-                "total_overtime_minutes": {
-                    "$sum": {"$ifNull": ["$overtime_minutes", 0]}
-                }
-            }
-        }
-    ]))
+    # Use the same aggregation builder as the explain endpoint.
+    pipeline = build_employee_monthly_pipeline(
+        emp_code, month_start, next_month
+    )
+    records = list(db.attendance_logs.aggregate(pipeline))
 
 
     summary = records[0] if records else {}
@@ -2394,17 +2395,9 @@ def explain_endpoint(
             else date(year, month_number + 1, 1)
         )
 
-        pipeline = [
-            {
-                "$match": {
-                    "emp_code": emp_code,
-                    "date": {
-                        "$gte": start.isoformat(),
-                        "$lt": next_month.isoformat()
-                    }
-                }
-            }
-        ]
+        pipeline = build_employee_monthly_pipeline(
+            emp_code, start, next_month
+        )
 
         result = db.command({
     "explain": {
