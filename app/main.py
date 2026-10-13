@@ -1289,10 +1289,13 @@ def regularize_attendance(
 
 
     def epoch_ms(value):
-
         if value is None:
-
             return None
+
+        # PyMongo may return naive datetimes that represent UTC.
+        # Attach UTC explicitly to avoid a local-time offset on Windows.
+        if value.tzinfo is None:
+            value = value.replace(tzinfo=timezone.utc)
 
         return int(value.timestamp() * 1000)
 
