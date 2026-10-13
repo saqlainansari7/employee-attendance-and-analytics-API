@@ -288,7 +288,12 @@ def create_employee(body: EmployeeIn):
 
     doc["created_at"] = datetime.now(timezone.utc).replace(microsecond=0)
 
-    db.employees.insert_one(doc)
+    try:
+        db.employees.insert_one(doc)
+    except DuplicateKeyError:
+        # Another concurrent request may have inserted this emp_code
+        # after the initial lookup; preserve the API's 409 contract.
+        raise HTTPException(status_code=409, detail="emp_code already exists")
 
     doc.pop("_id", None)
 
